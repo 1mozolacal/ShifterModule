@@ -171,9 +171,9 @@ void shiftDown() {
 
 void shiftUp() {
   //ecu signal to cut spark
-//  digitalWrite(ecuCutSpk, HIGH);
-//  delay(SHIFT_UP_START_DELAY);
-//  digitalWrite(ecuCutSpk, LOW);
+  digitalWrite(ecuCutSpk, HIGH);
+  delay(SHIFT_UP_START_DELAY);
+  digitalWrite(ecuCutSpk, LOW);
   
   //up shift code
   digitalWrite(shiftUpSolenoid, LOW);
