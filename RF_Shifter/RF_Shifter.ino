@@ -26,9 +26,9 @@
 #define SHIFT_OFF_CLUTCH_DELAY 0
 
 // solenoid control output pins
-int shiftUpSolenoid = 0;
+int shiftUpSolenoid = 2;
 int shiftDownSolenoid = 1;
-int clutchSolenoid = 2;
+int clutchSolenoid = 0;
 // output to ECU that will tell it to cut spart (upshift)
 int ecuCutSpk = 3;
 
@@ -191,7 +191,7 @@ void loop() {
   
   // if user pressed shift down button for the first time
   //if((millis() - lastDebounceTime) > debounceDelay) {
-    if(shiftDownState == LOW && !shiftedDown) {
+    if(shiftDownState == HIGH && !shiftedDown) {
       Serial.println("down");
       shiftDown();
       lastDebounceTime = millis();
@@ -201,14 +201,14 @@ void loop() {
       // remember that we already did a shift so that we don't repeat
       // it next loop without the user re-pressing the button first
       shiftedDown = true;
-    } else if(shiftDownState == HIGH && shiftedDown) {
+    } else if(shiftDownState == LOW && shiftedDown) {
       // else if user released the button
       shiftedDown = false;
       lastDebounceTime = millis();
     }
   
    // if user pressed shift up button for the first time
-    if(shiftUpState == LOW && !shiftedUp) {
+    if(shiftUpState == HIGH && !shiftedUp) {
       Serial.println("up");
       shiftUp();
       lastDebounceTime = millis();
@@ -218,7 +218,7 @@ void loop() {
       // remember that we already did a shift so that we don't repeat
       // it next loop without the user re-pressing the button first
       shiftedUp = true;
-    } else if(shiftUpState == HIGH && shiftedUp) {
+    } else if(shiftUpState == LOW && shiftedUp) {
       // else if user released the button
       shiftedUp = false;
       lastDebounceTime = millis();
