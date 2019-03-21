@@ -1,5 +1,6 @@
 #include <SPI.h>
 #include <WiFi101.h>
+#include <SD.h>
 #include "arduino_secrets.h" 
 
 // defines for setting up the timings between solenoids. See diagram:
@@ -16,6 +17,8 @@
 //     |   |                             |   |
 //   ->|   |<- CLUTCH_SHIFT_ON_DELAY     |   |
 //     |   |                           ->|   |<- SHIFT_OFF_CLUTCH_DELAY
+
+//default values
 #define SHIFT_UP_START_DELAY 70
 #define CLUTCH_SHIFT_ON_DELAY 60
 #define SHIFT_UP_TIME 150
@@ -23,15 +26,15 @@
 #define SHIFT_OFF_CLUTCH_DELAY 0
 
 // solenoid control output pins
-int shiftUpSolenoid = 5;
-int shiftDownSolenoid = 4;
-int clutchSolenoid = 3;
+int shiftUpSolenoid = 0;
+int shiftDownSolenoid = 1;
+int clutchSolenoid = 2;
 // output to ECU that will tell it to cut spart (upshift)
-int ecuCutSpk = 2;
+int ecuCutSpk = 3;
 
 // button inputs for shifting
-int shiftUpBtn = 10;
-int shiftDownBtn = 9;
+int shiftUpBtn = 11;
+int shiftDownBtn = 12;
 
 // variables used for storing the shifting state.
 // prevents multiple shifts happening if driver keeps shifting btns pressed
@@ -46,11 +49,11 @@ int lastUpShiftState;
 int lastDownShiftState;
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;
+//----------------------SD varibles
+boolean useCard = false;
+String logFileName = "";//the name of the log file for the current session
 
-
-//wifi stuff build off of Tom Igoe simpleWebServer example
-
-///////please enter your sensitive data in the Secret tab/arduino_secrets.h
+//-----------------------wifi stuff build off of Tom Igoe simpleWebServer example
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;                // your network key Index number (needed only for WEP)
@@ -65,6 +68,7 @@ int inputValues[5];
 boolean wifiSetup = true;
 long lastLoopTime = 0;
 
+//has 6 total seconds in setup delay
 void setup() {
 
   // sets up all required pins as inputs or outputs
@@ -89,20 +93,36 @@ void setup() {
   digitalWrite(ecuCutSpk, LOW);
 
   Serial.begin(9600);
-
+  
 
   digitalWrite(clutchSolenoid, LOW);
-  delay(2000);
+  delay(2000);//SETUP DELAY
   digitalWrite(clutchSolenoid, HIGH);
 
-  //Wifi stuff
+
+  //-------SD stuff
+  //Set up of SD car
+  delay(3000);
+  if (!SD.begin(4)) {
+    Serial.println("Card failed, or not present");
+  } else{
+    Serial.println("card initialized.");
+    int number = readLogNumThenIncrease();
+    String preNum = "log-";
+    String dot = ".txt";
+    logFileName = preNum + number + dot;
+    useCard = true;
+    readSettings();
+  }
   
-  //inits String array
-  inputValues[0] = 70;//SHIFT_UP_START_DELAY
-  inputValues[1] = 60;//CLUTCH_SHIFT_ON_DELAY
-  inputValues[2] = 150;//SHIFT_UP_TIME
-  inputValues[3] = 150;//SHIFT_DOWN_TIME
-  inputValues[4] = 0;//SHIFT_OFF_CLUTCH_DELAY
+  //------Wifi stuff
+  
+  //inits int array
+  inputValues[0] = SHIFT_UP_START_DELAY;//SHIFT_UP_START_DELAY
+  inputValues[1] = CLUTCH_SHIFT_ON_DELAY;//CLUTCH_SHIFT_ON_DELAY
+  inputValues[2] = SHIFT_UP_TIME;//SHIFT_UP_TIME
+  inputValues[3] = SHIFT_DOWN_TIME;//SHIFT_DOWN_TIME
+  inputValues[4] = SHIFT_OFF_CLUTCH_DELAY;//SHIFT_OFF_CLUTCH_DELAY
   /*for(int i =0; i < numberOfInputs; i++){
     inputValues[i] = "";
   }*/
@@ -129,7 +149,7 @@ void setup() {
       // don't continue
       wifiSetup = false;
     }else{
-    delay(1000); // wait 1 seconds for connection:
+    delay(1000); // wait 1 seconds for connection: SETUP DELAY
     server.begin();  // start the web server on port 80
     printWiFiStatus();// you're connected now, so print out the status
     }//end of if-else for faiture to create access point
@@ -138,13 +158,13 @@ void setup() {
 
 void shiftDown() {
   digitalWrite(clutchSolenoid, LOW);
-  delay(CLUTCH_SHIFT_ON_DELAY);
+  delay(inputValues[1]);//CLUTCH_SHIFT_ON_DELAY
   digitalWrite(shiftDownSolenoid, LOW);
   digitalWrite(led, HIGH);
-  delay(SHIFT_DOWN_TIME);
+  delay(inputValues[3]);//SHIFT_DOWN_TIME
   digitalWrite(shiftDownSolenoid, HIGH);
   digitalWrite(led, LOW);
-  delay(SHIFT_OFF_CLUTCH_DELAY);
+  delay(inputValues[4]);//SHIFT_OFF_CLUTCH_DELAY
   digitalWrite(clutchSolenoid, HIGH);
   
 }
@@ -158,7 +178,7 @@ void shiftUp() {
   //up shift code
   digitalWrite(shiftUpSolenoid, LOW);
   digitalWrite(led, HIGH);
-  delay(SHIFT_UP_TIME);
+  delay(inputValues[2]);//SHIFT_UP_TIME
   digitalWrite(shiftUpSolenoid, HIGH);
   digitalWrite(led, LOW);
 }
@@ -166,45 +186,46 @@ void shiftUp() {
 
 void loop() {
 
-int shiftDownState = digitalRead(shiftDownBtn);
+  int shiftDownState = digitalRead(shiftDownBtn);
   int shiftUpState = digitalRead(shiftUpBtn);
   
   // if user pressed shift down button for the first time
-
-  if((millis() - lastDebounceTime) > debounceDelay) {
-    if(shiftDownState == HIGH && !shiftedDown) {
+  //if((millis() - lastDebounceTime) > debounceDelay) {
+    if(shiftDownState == LOW && !shiftedDown) {
+      Serial.println("down");
       shiftDown();
       lastDebounceTime = millis();
-      Serial.println("down");
+      
 
     
       // remember that we already did a shift so that we don't repeat
       // it next loop without the user re-pressing the button first
       shiftedDown = true;
-    } else if(shiftDownState == LOW && shiftedDown) {
+    } else if(shiftDownState == HIGH && shiftedDown) {
       // else if user released the button
       shiftedDown = false;
       lastDebounceTime = millis();
     }
   
    // if user pressed shift up button for the first time
-    if(shiftUpState == HIGH && !shiftedUp) {
+    if(shiftUpState == LOW && !shiftedUp) {
+      Serial.println("up");
       shiftUp();
       lastDebounceTime = millis();
-      Serial.println("up");
+      
           
   
       // remember that we already did a shift so that we don't repeat
       // it next loop without the user re-pressing the button first
       shiftedUp = true;
-    } else if(shiftUpState == LOW && shiftedUp) {
+    } else if(shiftUpState == HIGH && shiftedUp) {
       // else if user released the button
       shiftedUp = false;
       lastDebounceTime = millis();
     }
   
     
-  } 
+  
 
   //Serial.print("Running ");
   //Serial.println( millis() - lastLoopTime );
@@ -249,23 +270,6 @@ void printMacAddress(byte mac[]) {
   Serial.println();
 }
 
-/*
-  WiFi Web Server LED Blink
-
-  A simple web server that lets you blink an LED via the web.
-  This sketch will create a new access point (with no password).
-  It will then launch a new server and print out the IP address
-  to the Serial monitor. From there, you can open that address in a web browser
-  to turn on and off the LED on pin 13.
-
-  If the IP address of your shield is yourAddress:
-    http://yourAddress/H turns the LED on
-    http://yourAddress/L turns it off
-
-  created 25 Nov 2012
-  by Tom Igoe
-  adapted to WiFi AP by Adafruit
- */
 
 void checkForClientAndRead(){
   // compare the previous status to the current status
@@ -412,6 +416,98 @@ void setIntFromString(int index, String value){
   } else{
     inputValues[index] = intVal;
   }
+}
+
+
+
+
+//SD functions
+//zero is return if file not available or if there is a non number at the begining
+//if there is a letter inbetween the number it will stop reading the number at the letter
+int getLogNumber(){
+  if(!useCard){
+    return 0;
+  }
+  File file = SD.open("logs/number.txt");
+  return readPosIntFromFile(file);
+}
+
+int readLogNumThenIncrease(){
+  if(!useCard){
+    return 0;
+  }
+  int id = getLogNumber();
+  SD.remove("logs/number.txt");
+  File numberFile = SD.open("logs/number.txt", FILE_WRITE);
+  if(numberFile){
+    numberFile.println( id+1 );
+    numberFile.close();
+  }else {
+    Serial.println("not open in readLogNumThenIncrease");
+  }
+  return id;
+}
+
+void writeLog(String action){
+  if(!useCard){
+    return;
+  }
+  File logFile = SD.open("logs/"+logFileName, FILE_WRITE);
+  if(logFile){
+    String between = " at time ";
+    String mil = (String) millis();
+    String writeString = action + between + mil;
+    logFile.println( writeString);
+    logFile.close();
+    Serial.println(writeString);
+  }else{
+    Serial.println("can't log");
+  }
+}
+
+
+void saveSettings(){
+  if(!useCard){
+    return;
+  }
+  String space = " ";
+  String saveString = inputValues[0] + space +inputValues[1]+space+inputValues[2]+space+inputValues[3]+space+inputValues[4] ;
+  SD.remove("config.txt");
+  File file = SD.open("config.txt", FILE_WRITE);
+  file.print(saveString);
+  file.close();
+}
+
+//reads the values of the sd cards
+void readSettings(){
+  if(!useCard){
+    return;
+  }
+  File file = SD.open("config.txt");
+  for(int i = 0; i < numberOfInputs ; i++){
+    int nextNum = readPosIntFromFile(file);
+    inputValues[i] = nextNum;
+  }//end of for
   
 }
+
+//read for a postive number stop as soon a a non integer character is reached
+//if no number present then zero is returned
+int readPosIntFromFile(File file){
+  boolean notNumber =  false;
+  int decodedNum = 0;
+  while(file.available() && !notNumber){
+    int charVal = file.read();
+    if(charVal>=48 && charVal <=57){
+      decodedNum = decodedNum*10 + charVal-48;
+    } else {
+      notNumber = true;
+    }
+  }
+  return decodedNum;
+  
+}
+
+
+
 
