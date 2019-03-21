@@ -18,6 +18,9 @@
 //   ->|   |<- CLUTCH_SHIFT_ON_DELAY     |   |
 //     |   |                           ->|   |<- SHIFT_OFF_CLUTCH_DELAY
 
+#define MIN_VALUE_OF_DELAYS 0
+#define MAX_VALUE_OF_DELAYS 500
+
 //default values
 #define SHIFT_UP_START_DELAY 70
 #define CLUTCH_SHIFT_ON_DELAY 60
@@ -102,7 +105,7 @@ void setup() {
 
   //-------SD stuff
   //Set up of SD car
-  delay(3000);
+  delay(3000);//SETUP DELAY
   if (!SD.begin(4)) {
     Serial.println("Card failed, or not present");
   } else{
@@ -166,7 +169,8 @@ void shiftDown() {
   digitalWrite(led, LOW);
   delay(inputValues[4]);//SHIFT_OFF_CLUTCH_DELAY
   digitalWrite(clutchSolenoid, HIGH);
-  
+
+  writeLog("Shift down finished");
 }
 
 void shiftUp() {
@@ -181,6 +185,8 @@ void shiftUp() {
   delay(inputValues[2]);//SHIFT_UP_TIME
   digitalWrite(shiftUpSolenoid, HIGH);
   digitalWrite(led, LOW);
+
+  writeLog("Shift up finished");
 }
 
 
@@ -193,9 +199,10 @@ void loop() {
   //if((millis() - lastDebounceTime) > debounceDelay) {
     if(shiftDownState == HIGH && !shiftedDown) {
       Serial.println("down");
+
       shiftDown();
       lastDebounceTime = millis();
-      
+      Serial.println("down");
 
     
       // remember that we already did a shift so that we don't repeat
@@ -212,7 +219,7 @@ void loop() {
       Serial.println("up");
       shiftUp();
       lastDebounceTime = millis();
-      
+      Serial.println("up");
           
   
       // remember that we already did a shift so that we don't repeat
@@ -316,7 +323,8 @@ void checkForClientAndRead(){
             //client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
             //client.print("<input type=\"text\" name=\"LastName\" value=\"Mouse\"><br>");
             //client.print("<input type=\"submit\" value=\"Submit\">");
-            client.print("When inputing value make sure that there is no spaces &,= or H ");
+            client.print("When inputing value make sure that there is no spaces &,= or H <br>");
+            client.print("Card enabled: " + String(useCard) );
             client.print("<form action=\"/Z\" method=\"get\">");
             client.print("SHIFT_UP_START_DELAY: <input type=\"text\" name=\"a\" value="+String(inputValues[0])+"><br>");
             client.print("CLUTCH_SHIFT_ON_DELAY: <input type=\"text\" name=\"b\" value="+String(inputValues[1])+"><br>");
@@ -399,14 +407,17 @@ void parseInfo(String data){
     }
   }//end of for loop
 
-  //printlns for testing
+
+  /*//printlns for testing
   Serial.println("Values after reader are:");
   for(int i = 0 ; i < numberOfInputs; i++){
     Serial.println( inputValues[i] );
-  }
+  }*/
+  saveSettings();//saves the changes to the SD card
   
 }
 
+//This has check to keep the number between set range
 void setIntFromString(int index, String value){
   int intVal = value.toInt();
   if(intVal == 0){
@@ -414,6 +425,12 @@ void setIntFromString(int index, String value){
   }else if( intVal == -1){//-1 means 0;
     inputValues[index] = 0;
   } else{
+    if(intVal<MIN_VALUE_OF_DELAYS){
+      intVal = MIN_VALUE_OF_DELAYS;
+    }
+    if(intVal>MAX_VALUE_OF_DELAYS){
+      intVal=MAX_VALUE_OF_DELAYS;
+    }
     inputValues[index] = intVal;
   }
 }
