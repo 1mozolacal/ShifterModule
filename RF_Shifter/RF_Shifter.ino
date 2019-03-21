@@ -201,9 +201,10 @@ void loop() {
   //if((millis() - lastDebounceTime) > debounceDelay) {
     if(shiftDownState == HIGH && !shiftedDown) {
       Serial.println("down");
+
       shiftDown();
       lastDebounceTime = millis();
-      
+      Serial.println("down");
 
     
       // remember that we already did a shift so that we don't repeat
@@ -220,7 +221,7 @@ void loop() {
       Serial.println("up");
       shiftUp();
       lastDebounceTime = millis();
-      
+      Serial.println("up");
           
   
       // remember that we already did a shift so that we don't repeat
