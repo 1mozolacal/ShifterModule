@@ -1,6 +1,7 @@
 #include <SPI.h>
 #include <WiFi101.h>
 #include <SD.h>
+#include <WiFi101OTA.h>
 #include "arduino_secrets.h" 
 
 // defines for setting up the timings between solenoids. See diagram:
@@ -34,6 +35,9 @@ int shiftDownSolenoid = 1;
 int clutchSolenoid = 0;
 // output to ECU that will tell it to cut spart (upshift)
 int ecuCutSpk = 3;
+int ecuAutoUpShift = 6;
+int ecuLanch = 7;
+int enableAutoUpShift = 8;
 
 // button inputs for shifting
 int shiftUpBtn = 11;
@@ -84,7 +88,10 @@ void setup() {
   
   pinMode(shiftUpBtn, INPUT);
   pinMode(shiftDownBtn, INPUT);
-
+  
+  pinMode(ecuAutoUpShift, INPUT);
+  pinMode(ecuLanch, INPUT);
+  pinMode(enableAutoUpShift, INPUT);
   //set up led connected to pin 13 to visualize when the shift button has been activiated by user
   
   pinMode(led, OUTPUT);
@@ -159,6 +166,10 @@ void setup() {
     printWiFiStatus();// you're connected now, so print out the status
     }//end of if-else for faiture to create access point
   }//end of if-eles for no shield chekc
+
+  if(wifiSetup && useCard){
+    WiFiOTA.begin("Arduino", "4992", InternalStorage);
+  }
 }
 
 void shiftDown() {
@@ -194,8 +205,16 @@ void shiftUp() {
 
 void loop() {
 
+  if(wifiSetup && useCard){
+    WiFiOTA.poll();
+  }
+  
   int shiftDownState = digitalRead(shiftDownBtn);
   int shiftUpState = digitalRead(shiftUpBtn);
+  boolean enableAuto = digitalRead(enableAutoUpShift);
+  if(shiftUpState == LOW && enableAuto ){
+    shiftUpState = digitalRead(ecuAutoUpShift);
+  }
   
   // if user pressed shift down button for the first time
   //if((millis() - lastDebounceTime) > debounceDelay) {
@@ -339,6 +358,7 @@ void checkForClientAndRead(){
             client.print("<br><br>Turn on board light(on MKR1000) for testing<br>");
             client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
             client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
+            client.print("And remeber that there is no misstakes, just happy accidents <br>");
             
             // The HTTP response ends with another blank line:
             client.println();
