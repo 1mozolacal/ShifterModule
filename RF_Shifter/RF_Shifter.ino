@@ -82,9 +82,9 @@ void setup() {
   pinMode(clutchSolenoid, OUTPUT);
   pinMode(shiftUpSolenoid, OUTPUT);
   pinMode(shiftDownSolenoid, OUTPUT);
-  digitalWrite(clutchSolenoid, HIGH);
-  digitalWrite(shiftUpSolenoid, HIGH);
-  digitalWrite(shiftDownSolenoid, HIGH);
+  digitalWrite(clutchSolenoid, LOW);
+  digitalWrite(shiftUpSolenoid, LOW);
+  digitalWrite(shiftDownSolenoid, LOW);
   
   pinMode(shiftUpBtn, INPUT);
   pinMode(shiftDownBtn, INPUT);
@@ -105,9 +105,9 @@ void setup() {
   Serial.begin(9600);
   
 
-  digitalWrite(clutchSolenoid, LOW);
-  delay(2000);//SETUP DELAY
   digitalWrite(clutchSolenoid, HIGH);
+  delay(2000);//SETUP DELAY
+  digitalWrite(clutchSolenoid, LOW);
 
 
   //inits int array
@@ -173,15 +173,15 @@ void setup() {
 }
 
 void shiftDown() {
-  digitalWrite(clutchSolenoid, LOW);
+  digitalWrite(clutchSolenoid, HIGH);
   delay(inputValues[1]);//CLUTCH_SHIFT_ON_DELAY
-  digitalWrite(shiftDownSolenoid, LOW);
+  digitalWrite(shiftDownSolenoid, HIGH);
   digitalWrite(led, HIGH);
   delay(inputValues[3]);//SHIFT_DOWN_TIME
-  digitalWrite(shiftDownSolenoid, HIGH);
+  digitalWrite(shiftDownSolenoid, LOW);
   digitalWrite(led, LOW);
   delay(inputValues[4]);//SHIFT_OFF_CLUTCH_DELAY
-  digitalWrite(clutchSolenoid, HIGH);
+  digitalWrite(clutchSolenoid, LOW);
 
   writeLog("Shift down finished");
 }
@@ -193,10 +193,10 @@ void shiftUp() {
   digitalWrite(ecuCutSpk, LOW);
   
   //up shift code
-  digitalWrite(shiftUpSolenoid, LOW);
+  digitalWrite(shiftUpSolenoid, HIGH);
   digitalWrite(led, HIGH);
   delay(inputValues[2]);//SHIFT_UP_TIME
-  digitalWrite(shiftUpSolenoid, HIGH);
+  digitalWrite(shiftUpSolenoid, LOW);
   digitalWrite(led, LOW);
 
   writeLog("Shift up finished");
