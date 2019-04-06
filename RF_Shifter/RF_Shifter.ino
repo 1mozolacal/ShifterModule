@@ -82,9 +82,9 @@ void setup() {
   pinMode(clutchSolenoid, OUTPUT);
   pinMode(shiftUpSolenoid, OUTPUT);
   pinMode(shiftDownSolenoid, OUTPUT);
-  digitalWrite(clutchSolenoid, LOW);
-  digitalWrite(shiftUpSolenoid, LOW);
-  digitalWrite(shiftDownSolenoid, LOW);
+  digitalWrite(clutchSolenoid, HIGH);
+  digitalWrite(shiftUpSolenoid, HIGH);
+  digitalWrite(shiftDownSolenoid, HIGH);
   
   pinMode(shiftUpBtn, INPUT);
   pinMode(shiftDownBtn, INPUT);
@@ -105,9 +105,9 @@ void setup() {
   Serial.begin(9600);
   
 
-  digitalWrite(clutchSolenoid, HIGH);
-  delay(2000);//SETUP DELAY
   digitalWrite(clutchSolenoid, LOW);
+  delay(2000);//SETUP DELAY
+  digitalWrite(clutchSolenoid, HIGH);
 
 
   //inits int array
@@ -173,15 +173,15 @@ void setup() {
 }
 
 void shiftDown() {
-  digitalWrite(clutchSolenoid, HIGH);
+  digitalWrite(clutchSolenoid, LOW);
   delay(inputValues[1]);//CLUTCH_SHIFT_ON_DELAY
-  digitalWrite(shiftDownSolenoid, HIGH);
+  digitalWrite(shiftDownSolenoid, LOW);
   digitalWrite(led, HIGH);
   delay(inputValues[3]);//SHIFT_DOWN_TIME
-  digitalWrite(shiftDownSolenoid, LOW);
+  digitalWrite(shiftDownSolenoid, HIGH);
   digitalWrite(led, LOW);
   delay(inputValues[4]);//SHIFT_OFF_CLUTCH_DELAY
-  digitalWrite(clutchSolenoid, LOW);
+  digitalWrite(clutchSolenoid, HIGH);
 
   writeLog("Shift down finished");
 }
@@ -193,10 +193,10 @@ void shiftUp() {
   digitalWrite(ecuCutSpk, LOW);
   
   //up shift code
-  digitalWrite(shiftUpSolenoid, HIGH);
+  digitalWrite(shiftUpSolenoid, LOW);
   digitalWrite(led, HIGH);
   delay(inputValues[2]);//SHIFT_UP_TIME
-  digitalWrite(shiftUpSolenoid, LOW);
+  digitalWrite(shiftUpSolenoid, HIGH);
   digitalWrite(led, LOW);
 
   writeLog("Shift up finished");
@@ -358,7 +358,7 @@ void checkForClientAndRead(){
             client.print("<br><br>Turn on board light(on MKR1000) for testing<br>");
             client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
             client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
-            client.print("And remeber that there is no misstakes, just happy accidents <br>");
+            client.print("And remeber that there is no misstakes, just happy accidents (UV:1.0)<br>");
             
             // The HTTP response ends with another blank line:
             client.println();
@@ -457,7 +457,9 @@ void setIntFromString(int index, String value){
   }
 }
 
-
+void printFileToClient(Client client, String fileName){
+  
+}
 
 
 //SD functions
