@@ -29,19 +29,25 @@
 #define SHIFT_DOWN_TIME 150
 #define SHIFT_OFF_CLUTCH_DELAY 0
 
+#define SOLENOID_ACTIVE HIGH
+#define SOLENOID_INACTIVE LOW
+//temperay
+String tempLog = "";
+int lastShift = 0;
+
 // solenoid control output pins
 int shiftUpSolenoid = 2;
 int shiftDownSolenoid = 1;
 int clutchSolenoid = 0;
 // output to ECU that will tell it to cut spart (upshift)
 int ecuCutSpk = 3;
-int ecuAutoUpShift = 6;
-int ecuLanch = 7;
-int enableAutoUpShift = 8;
+int ecuAutoUpShift = 5;//old 6
+int ecuLanch = 7;//old 7
+int enableAutoUpShift = 6;//old 8
 
 // button inputs for shifting
-int shiftUpBtn = 11;
-int shiftDownBtn = 12;
+int shiftUpBtn = 12;
+int shiftDownBtn = 11;
 
 // variables used for storing the shifting state.
 // prevents multiple shifts happening if driver keeps shifting btns pressed
@@ -69,22 +75,26 @@ int led =  LED_BUILTIN;
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
+//web logging
+boolean printTree = false;
+String printFile = "";
+
 static int numberOfInputs = 5;
 int inputValues[5];
 
 boolean wifiSetup = true;
 long lastLoopTime = 0;
 
-//has 6 total seconds in setup delay
+//has 4 total seconds in setup delay (2 is commented out)
 void setup() {
 
   // sets up all required pins as inputs or outputs
   pinMode(clutchSolenoid, OUTPUT);
   pinMode(shiftUpSolenoid, OUTPUT);
   pinMode(shiftDownSolenoid, OUTPUT);
-  digitalWrite(clutchSolenoid, HIGH);
-  digitalWrite(shiftUpSolenoid, HIGH);
-  digitalWrite(shiftDownSolenoid, HIGH);
+  digitalWrite(clutchSolenoid, SOLENOID_INACTIVE);
+  digitalWrite(shiftUpSolenoid, SOLENOID_INACTIVE);
+  digitalWrite(shiftDownSolenoid, SOLENOID_INACTIVE);
   
   pinMode(shiftUpBtn, INPUT);
   pinMode(shiftDownBtn, INPUT);
@@ -105,9 +115,9 @@ void setup() {
   Serial.begin(9600);
   
 
-  digitalWrite(clutchSolenoid, LOW);
-  delay(2000);//SETUP DELAY
-  digitalWrite(clutchSolenoid, HIGH);
+  //digitalWrite(clutchSolenoid, LOW);//act
+  //delay(2000);//SETUP DELAY
+  //digitalWrite(clutchSolenoid, HIGH);//de act
 
 
   //inits int array
@@ -119,7 +129,7 @@ void setup() {
   
   //-------SD stuff
   //Set up of SD car
-  delay(3000);//SETUP DELAY
+  delay(2000);//SETUP DELAY
   if (!SD.begin(4)) {
     Serial.println("Card failed, or not present");
   } else{
@@ -151,7 +161,7 @@ void setup() {
     Serial.print("Creating access point named: ");// print the network name (SSID);
     Serial.println(ssid);
     // Create open network. Change this line if you want to create an WEP network:
-    delay(1000);
+    delay(1000);//SETUP DELAY
     status = WiFi.beginAP(ssid);
     
     if (status != WL_AP_LISTENING) {
@@ -173,17 +183,19 @@ void setup() {
 }
 
 void shiftDown() {
-  digitalWrite(clutchSolenoid, LOW);
+  digitalWrite(clutchSolenoid, SOLENOID_ACTIVE);
   delay(inputValues[1]);//CLUTCH_SHIFT_ON_DELAY
-  digitalWrite(shiftDownSolenoid, LOW);
+  digitalWrite(shiftDownSolenoid, SOLENOID_ACTIVE);
   digitalWrite(led, HIGH);
   delay(inputValues[3]);//SHIFT_DOWN_TIME
-  digitalWrite(shiftDownSolenoid, HIGH);
+  digitalWrite(shiftDownSolenoid, SOLENOID_INACTIVE);
   digitalWrite(led, LOW);
   delay(inputValues[4]);//SHIFT_OFF_CLUTCH_DELAY
-  digitalWrite(clutchSolenoid, HIGH);
+  digitalWrite(clutchSolenoid, SOLENOID_INACTIVE);
 
   writeLog("Shift down finished");
+  lastShift = -3;
+  webLog("down shift at" + String (millis()) );
 }
 
 void shiftUp() {
@@ -193,13 +205,15 @@ void shiftUp() {
   digitalWrite(ecuCutSpk, LOW);
   
   //up shift code
-  digitalWrite(shiftUpSolenoid, LOW);
+  digitalWrite(shiftUpSolenoid, SOLENOID_ACTIVE);
   digitalWrite(led, HIGH);
   delay(inputValues[2]);//SHIFT_UP_TIME
-  digitalWrite(shiftUpSolenoid, HIGH);
+  digitalWrite(shiftUpSolenoid, SOLENOID_INACTIVE);
   digitalWrite(led, LOW);
 
   writeLog("Shift up finished");
+  lastShift = 3;
+  webLog("up shift at" + String (millis()) );
 }
 
 
@@ -323,7 +337,7 @@ void checkForClientAndRead(){
   if (client) {                             // if you get a client,
     Serial.println("new client");           // print a message out the serial port
     String currentLine = "";                // make a String to hold incoming data from the client
-    boolean saveLine = false;
+    String saveLine = "";
     while (client.connected()) {            // loop while the client's connected
       if (client.available()) {             // if there's bytes to read from the client,
         char c = client.read();             // read a byte, then
@@ -344,6 +358,8 @@ void checkForClientAndRead(){
             //client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
             //client.print("<input type=\"text\" name=\"LastName\" value=\"Mouse\"><br>");
             //client.print("<input type=\"submit\" value=\"Submit\">");
+
+            //For tuning
             client.print("When inputing value make sure that there is no spaces &,= or H <br>");
             client.print("Card enabled: " + String(useCard) );
             client.print("<form action=\"/Z\" method=\"get\">");
@@ -354,11 +370,36 @@ void checkForClientAndRead(){
             client.print("SHIFT_OFF_CLUTCH_DELAY: <input type=\"text\" name=\"b\" value="+String(inputValues[4])+"><br>");
             client.print("<input type=\"submit\" value=\"Submit\"></form>");
 
+            //For reading logs
+            client.print("<form action=\"/readFile\" method=\"get\"><br>");
+            client.print("Enter file print to webpage: <input type=\"text\" name=\"file\" value=\"\">");
+            client.print("<input type=\"submit\" value=\"Submit\"></form><br>");
+
+            //for listing field structure
+            client.print("<br><form action=\"/listFile\" method=\"get\">");
+            client.print("List file structure:<input type=\"submit\" value=\"Submit\"></form><br>");
+            
             //for testing the connection
+            client.print( "Testing for last shift" + String(lastShift) + "-end" );
+            client.print( "<br>ecuAutoUpShift:" + String( digitalRead(ecuAutoUpShift)) );
+            client.print( "<br>ecuLanch:" + String( digitalRead(ecuLanch)) );
+            client.print( "<br>enableAutoUpShift:" + String( digitalRead(enableAutoUpShift)) );
             client.print("<br><br>Turn on board light(on MKR1000) for testing<br>");
             client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
             client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
             client.print("And remeber that there is no misstakes, just happy accidents (UV:1.0)<br>");
+
+            //print 
+            if(printTree){
+              printTreeToClient(client);
+              printTree = false;
+            }else if(printFile != ""){
+              printFileToClient(client, printFile);
+              printFile="";
+            }
+            
+            //tmep log
+            client.print( "<br> " + tempLog );
             
             // The HTTP response ends with another blank line:
             client.println();
@@ -366,12 +407,24 @@ void checkForClientAndRead(){
             break;
           }
           else {      // if you got a newline, then clear currentLine:
-            if(saveLine){
-              saveLine = false;
+            if(saveLine == "Z"){
+              saveLine = "";
               Serial.println("______________IMPORTANT LINE__________");
               Serial.println(currentLine);
+              webLog("______________IMPORTANT LINE__________");
+              webLog(currentLine);
+              webLog("--------------------------------------");
               Serial.println("--------------------------------------"); 
               parseInfo(currentLine); 
+            } else if(saveLine == "readFile"){
+              printFile = parseInfoFile(currentLine);
+              webLog("READDING FILE" + printFile + "<");
+              webLog( currentLine);
+              saveLine =" ";
+            } else if(saveLine == "listFile"){
+              printTree = true;
+              webLog("LIST ALL");
+              saveLine = " ";
             }
             currentLine = "";
             
@@ -383,8 +436,14 @@ void checkForClientAndRead(){
         }
 
         // Check to see if the client request was "GET /H" or "GET /L":
-        if(currentLine.endsWith("GET ") ){
-          saveLine=true;
+        if(currentLine.endsWith("GET /Z") ){
+          saveLine="Z";
+        }
+        if(currentLine.endsWith("GET /readFile") ){
+          saveLine = "readFile";
+        }
+        if(currentLine.endsWith("GET /listFile") ){
+          saveLine = "listFile";
         }
         if (currentLine.endsWith("GET /H")) {
           digitalWrite(led, HIGH);               // GET /H turns the LED on
@@ -400,6 +459,37 @@ void checkForClientAndRead(){
   }
 }//end of check for client
 
+String parseInfoFile(String data){
+
+  int endOfString = -1;
+  for(int i =data.length()-1; i >=0; i --){
+    if(endOfString == -1){
+      if(data.charAt(i) == 'H'){
+        endOfString = i -1;
+      }
+    }
+  }
+
+  boolean reading = false;
+  String path = "";
+  for(int i = 0; i < endOfString;i++){
+    if(!reading){
+      if( data.charAt(i) == '='){
+        reading = true;
+      }else{
+        continue;
+      }
+    } else {
+      if(data.charAt(i) == '_'){
+        path += '/';
+      }else{
+        path += data.charAt(i);
+      }
+    }
+  }//end of for
+  return path;
+}
+
 void parseInfo(String data){
   int stage = 0;//0 not started, 1=read key, 2=read value
   String value = "";
@@ -413,7 +503,7 @@ void parseInfo(String data){
     }
     char currentChar = data.charAt(i);
     if( currentChar == '=' ){
-      stage = 2;
+      stage = 2; 
       value = "";
     }else if( currentChar == '&' ){
       stage ==1;
@@ -457,8 +547,65 @@ void setIntFromString(int index, String value){
   }
 }
 
-void printFileToClient(Client client, String fileName){
+
+void webLog(String st){
+  tempLog+= st + "<br>";
+}
+void printTreeToClient(WiFiClient client){
+  File root = SD.open("/");
+  client.print("TREE----<br>" + printDirectory(root, 0) + "Done" );
+}
+
+//modified from David A. Mellis example Listfiles
+String printDirectory(File dir, int numTabs) {
   
+  String returnStr = "";
+  while (true) {
+
+    File entry =  dir.openNextFile();
+    if (! entry) {
+      // no more files
+      break;
+    }
+    for (uint8_t i = 0; i < numTabs; i++) {
+      returnStr+="---"; //Serial.print('\t');
+    }
+    returnStr+= entry.name(); //Serial.print(entry.name());
+    if (entry.isDirectory()) {
+      returnStr+="/"; //Serial.println("/");
+      returnStr += printDirectory(entry, numTabs + 1);
+    } else {
+      // files have sizes, directories do not
+      returnStr+= "---<br>"; //Serial.print("\t\t");
+      //Serial.println(entry.size(), DEC);
+    }
+    entry.close();
+  }
+  return returnStr;
+}
+
+void printFileToClient(WiFiClient client, String fileName){
+  if(!useCard){
+    return;
+  }
+  client.print("reading");
+  File file = SD.open(fileName);
+  if(file){
+    String printToClient = "";
+     while(file.available() ){
+      char cha = file.read();
+      if( cha == '/n'){
+        printToClient+= "<br>";
+      } else {
+        printToClient+=cha;
+      }
+     }//end of while
+     client.print( printToClient );
+     file.close();
+  } else {
+    client.print("file not found");
+  }
+   
 }
 
 
@@ -548,6 +695,8 @@ int readPosIntFromFile(File file){
   return decodedNum;
   
 }
+
+
 
 
 
