@@ -41,9 +41,10 @@ int shiftDownSolenoid = 1;
 int clutchSolenoid = 0;
 // output to ECU that will tell it to cut spart (upshift)
 int ecuCutSpk = 3;
-int ecuAutoUpShift = 5;//old 6
-int ecuLanch = 7;//old 7
+int ecuAutoUpShiftSignal = 5;//old 6
+int startLanchButton = 7;//old 7
 int enableAutoUpShift = 6;//old 8
+int endLanchButton = A6;
 
 // button inputs for shifting
 int shiftUpBtn = 12;
@@ -62,6 +63,9 @@ int lastUpShiftState;
 int lastDownShiftState;
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;
+
+boolean lanchInProgress = false;
+boolean lanched = false;
 //----------------------SD varibles
 boolean useCard = false;
 String logFileName = "";//the name of the log file for the current session
@@ -99,8 +103,9 @@ void setup() {
   pinMode(shiftUpBtn, INPUT);
   pinMode(shiftDownBtn, INPUT);
   
-  pinMode(ecuAutoUpShift, INPUT);
-  pinMode(ecuLanch, INPUT);
+  pinMode(ecuAutoUpShiftSignal, INPUT);
+  pinMode(startLanchButton, INPUT);
+  pinMode(endLanchButton, INPUT);
   pinMode(enableAutoUpShift, INPUT);
   //set up led connected to pin 13 to visualize when the shift button has been activiated by user
   
@@ -216,56 +221,89 @@ void shiftUp() {
   webLog("up shift at" + String (millis()) );
 }
 
+void lanch(){
+  digitalWrite(clutchSolenoid,SOLENOID_ACTIVE);
+  delay(2000);//change to tuned value
+  digitalWrite(clutchSolenoid,SOLENOID_INACTIVE);
+
+  writeLog("lanched");
+}
+
 
 void loop() {
 
   if(wifiSetup && useCard){
     WiFiOTA.poll();
   }
-  
-  int shiftDownState = digitalRead(shiftDownBtn);
-  int shiftUpState = digitalRead(shiftUpBtn);
-  boolean enableAuto = digitalRead(enableAutoUpShift);
-  if(shiftUpState == LOW && enableAuto ){
-    shiftUpState = digitalRead(ecuAutoUpShift);
-  }
-  
-  // if user pressed shift down button for the first time
-  //if((millis() - lastDebounceTime) > debounceDelay) {
-    if(shiftDownState == HIGH && !shiftedDown) {
-      Serial.println("down");
 
-      shiftDown();
-      lastDebounceTime = millis();
-      Serial.println("down");
-
+  int lanchEnabled = digitalRead(startLanchButton);
+  int lanchComplete = digitalRead(endLanchButton);
+  
+  if(!lanchInProgress && lanchEnabled == HIGH && !lanched){
+    lanchInProgress = true;
+    digitalWrite(clutchSolenoid,SOLENOID_ACTIVE);
+    //webLog("Ready for lanch:" + String(millis()) + " lanchEn:" + String(lanchEnabled) );
+    lastDebounceTime = millis();
+  } 
+  if(lanchInProgress){//the solenoid is in the middle of beging using for lanching
+    if((lanchEnabled==LOW || lanchComplete==HIGH) && (millis() - lastDebounceTime) > debounceDelay ){
+      lanchInProgress=false;
+      lanched = true;
+      digitalWrite(clutchSolenoid,SOLENOID_INACTIVE);
+      webLog("Lanced:" + String(millis()) + " lanchEnabled:" + String(lanchEnabled) + " lanchComplete:" + String(lanchComplete) );
+    }
+  }else{//normal shifting stuff
+    if(lanchEnabled == LOW){
+      lanched = false;
+      if(lanchComplete ==HIGH){
+        digitalWrite(clutchSolenoid,SOLENOID_ACTIVE);
+      }else{
+        digitalWrite(clutchSolenoid,SOLENOID_INACTIVE);
+      }
+    }
+    int shiftDownState = digitalRead(shiftDownBtn);
+    int shiftUpState = digitalRead(shiftUpBtn);
+    int enableAuto = digitalRead(enableAutoUpShift);
+    if(shiftUpState == LOW && enableAuto ){//for auto up shifting
+      shiftUpState = digitalRead(ecuAutoUpShiftSignal);
+    }
     
-      // remember that we already did a shift so that we don't repeat
-      // it next loop without the user re-pressing the button first
-      shiftedDown = true;
-    } else if(shiftDownState == LOW && shiftedDown) {
-      // else if user released the button
-      shiftedDown = false;
-      lastDebounceTime = millis();
-    }
+    // if user pressed shift down button for the first time
+    //if((millis() - lastDebounceTime) > debounceDelay) {
+      if(shiftDownState == HIGH && !shiftedDown) {
+        Serial.println("down");
   
-   // if user pressed shift up button for the first time
-    if(shiftUpState == HIGH && !shiftedUp) {
-      Serial.println("up");
-      shiftUp();
-      lastDebounceTime = millis();
-      Serial.println("up");
-          
+        shiftDown();
+        lastDebounceTime = millis();
+        Serial.println("down");
   
-      // remember that we already did a shift so that we don't repeat
-      // it next loop without the user re-pressing the button first
-      shiftedUp = true;
-    } else if(shiftUpState == LOW && shiftedUp) {
-      // else if user released the button
-      shiftedUp = false;
-      lastDebounceTime = millis();
-    }
-  
+      
+        // remember that we already did a shift so that we don't repeat
+        // it next loop without the user re-pressing the button first
+        shiftedDown = true;
+      } else if(shiftDownState == LOW && shiftedDown) {
+        // else if user released the button
+        shiftedDown = false;
+        lastDebounceTime = millis();
+      }
+    
+     // if user pressed shift up button for the first time
+      if(shiftUpState == HIGH && !shiftedUp) {
+        Serial.println("up");
+        shiftUp();
+        lastDebounceTime = millis();
+        Serial.println("up");
+            
+    
+        // remember that we already did a shift so that we don't repeat
+        // it next loop without the user re-pressing the button first
+        shiftedUp = true;
+      } else if(shiftUpState == LOW && shiftedUp) {
+        // else if user released the button
+        shiftedUp = false;
+        lastDebounceTime = millis();
+      }
+  }
     
   
 
@@ -381,9 +419,11 @@ void checkForClientAndRead(){
             
             //for testing the connection
             client.print( "Testing for last shift" + String(lastShift) + "-end" );
-            client.print( "<br>ecuAutoUpShift:" + String( digitalRead(ecuAutoUpShift)) );
-            client.print( "<br>ecuLanch:" + String( digitalRead(ecuLanch)) );
+            client.print( "<br>ecuAutoUpShiftSignal:" + String( digitalRead(ecuAutoUpShiftSignal)) );
+            client.print( "<br>lanchButton:" + String( digitalRead( startLanchButton)) );
             client.print( "<br>enableAutoUpShift:" + String( digitalRead(enableAutoUpShift)) );
+            client.print( " <br> lanched:" + String(lanched));
+            client.print("<br> lanch in pro:" + String(lanchInProgress) );
             client.print("<br><br>Turn on board light(on MKR1000) for testing<br>");
             client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
             client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
